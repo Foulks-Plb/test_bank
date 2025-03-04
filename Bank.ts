@@ -18,7 +18,10 @@ describe("Hetic", function () {
     // deploy ERC20
     const ERC20 = await hre.viem.deployContract("Hetic");
     // deploy bank with erc20 in argument
-    const Bank = await hre.viem.deployContract("Bank", [ERC20.address]);
+    const Bank = await hre.viem.deployContract("Bank", [
+      ERC20.address,
+      owner.account.address,
+    ]);
 
     const publicClient = await hre.viem.getPublicClient();
 
@@ -34,47 +37,65 @@ describe("Hetic", function () {
 
   describe("Test bank", function () {
     it("Should mint & deposit & withdraw & pay", async function () {
-      const { ERC20, Bank, owner, otherAccount } = await loadFixture(
-        deployErc20Fixture
-      );
+      const { ERC20, Bank, owner, otherAccount, otherAccount2 } =
+        await loadFixture(deployErc20Fixture);
 
       // mint 100 token for other account
       await ERC20.write.mint([otherAccount.account.address, 100n]);
       // mint 100 token for owner
       await ERC20.write.mint([owner.account.address, 100n]);
 
+      // Verify
+      const balanceOtherAccount = await ERC20.read.balanceOf([
+        otherAccount.account.address,
+      ]);
+      expect(balanceOtherAccount).to.equal(100n);
+
+      const balanceOwner = await ERC20.read.balanceOf([owner.account.address]);
+      expect(balanceOwner).to.equal(100n);
+
       // Approve bank to spend 100 token
       await ERC20.write.approve([Bank.address, 100n], {
         account: otherAccount.account,
       });
 
-      // Deposit 100 token in bank from other account
+      // // Deposit 100 token in bank from other account
       await Bank.write.deposit([100n], {
         account: otherAccount.account,
       });
 
-      const balance = await ERC20.read.balanceOf([Bank.address]);
-      expect(balance).to.equal(100n);
+      const balanceBank = await ERC20.read.balanceOf([Bank.address]);
+      expect(balanceBank).to.equal(100n);
 
       // other Account withdraw from bank
       await Bank.write.withdraw([10n], {
         account: otherAccount.account,
       });
 
-      // Verify if other account has 10n
+      // // Verify if other account has 10n
       const balance2 = await ERC20.read.balanceOf([
         otherAccount.account.address,
       ]);
       expect(balance2).to.equal(10n);
 
-      // Verify if bank has 90n
+      // // Verify if bank has 90n
       const balance3 = await ERC20.read.balanceOf([Bank.address]);
       expect(balance3).to.equal(90n);
 
+      await expect(
+        Bank.write.withdraw([90n], {
+          account: otherAccount2.account,
+        })
+      ).to.be.rejectedWith("Insufficient balance");
+
+      await ERC20.write.approve([Bank.address, 10n], {
+        account: owner.account,
+      });
+
       // Pay employees only owner
-      // await Bank.write.payEmployees([otherAccount.account.address, 10n], {
-      //   account: owner.account,
-      // });
+      await Bank.write.pay([otherAccount.account.address, 10n], {
+        account: owner.account,
+      });
     });
   });
 });
